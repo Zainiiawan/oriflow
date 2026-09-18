@@ -96,7 +96,11 @@ export async function createOrder(items: Array<{ id: string; name: string; price
       items: verifiedItems,
     }).returning()
 
-    const [profile] = await tx.select({ personalBp: mlmProfiles.personalBp, personalSp: mlmProfiles.personalSp })
+    const [profile] = await tx.select({
+      personalBp: mlmProfiles.personalBp,
+      personalSp: mlmProfiles.personalSp,
+      walletBalance: mlmProfiles.walletBalance,
+    })
       .from(mlmProfiles)
       .where(eq(mlmProfiles.userId, userId))
       .limit(1)
@@ -107,7 +111,7 @@ export async function createOrder(items: Array<{ id: string; name: string; price
         .set({
           personalBp: profile.personalBp + totalBp,
           personalSp: (Number(profile.personalSp) + total * 2).toFixed(2),
-          walletBalance: (Number((await tx.select({ walletBalance: mlmProfiles.walletBalance }).from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1))[0]?.walletBalance ?? 0) + commission).toFixed(2),
+          walletBalance: (Number(profile.walletBalance) + commission).toFixed(2),
         })
         .where(eq(mlmProfiles.userId, userId))
       await tx.insert(mlmRewards).values({
