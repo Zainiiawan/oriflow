@@ -60,7 +60,7 @@ export async function cancelOrder(orderId: string) {
     const [order] = await tx.select({ total: mlmOrders.total, totalBp: mlmOrders.totalBp }).from(mlmOrders)
       .where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId), eq(mlmOrders.status, 'Pending'))).limit(1)
     if (!order) throw new Error('Order is no longer cancellable')
-    const [profile] = await tx.select({ personalBp: mlmProfiles.personalBp, personalSp: mlmProfiles.personalSp, walletBalance: mlmProfiles.walletBalance })
+    const [profile] = await tx.select({ personalBp: mlmProfiles.personalBp, personalSp: mlmProfiles.personalSp, walletBalance: mlmProfiles.walletBalance, sponsorUserId: mlmProfiles.sponsorUserId })
       .from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
     if (profile) {
       const total = Number(order.total)
@@ -70,6 +70,20 @@ export async function cancelOrder(orderId: string) {
         walletBalance: Math.max(0, Number(profile.walletBalance) - total * 0.1).toFixed(2),
       }).where(eq(mlmProfiles.userId, userId))
       await tx.insert(mlmRewards).values({ userId, type: 'Order reversal', amount: (-total * 0.1).toFixed(2), bp: -order.totalBp, description: `Reversal for cancelled order ${orderId.slice(0, 8).toUpperCase()}` })
+
+      const commissionRates = [0.1, 0.05, 0.02]
+      let sponsorUserId = profile.sponsorUserId
+      const reversedSponsors = new Set<string>()
+      for (let level = 0; level < commissionRates.length && sponsorUserId; level += 1) {
+        if (reversedSponsors.has(sponsorUserId)) break
+        reversedSponsors.add(sponsorUserId)
+        const [sponsor] = await tx.select({ userId: mlmProfiles.userId, sponsorUserId: mlmProfiles.sponsorUserId, walletBalance: mlmProfiles.walletBalance }).from(mlmProfiles).where(eq(mlmProfiles.userId, sponsorUserId)).limit(1)
+        if (!sponsor) break
+        const commission = total * commissionRates[level]
+        await tx.update(mlmProfiles).set({ walletBalance: Math.max(0, Number(sponsor.walletBalance) - commission).toFixed(2) }).where(eq(mlmProfiles.userId, sponsor.userId))
+        await tx.insert(mlmRewards).values({ userId: sponsor.userId, type: `Level ${level + 1} reversal`, amount: (-commission).toFixed(2), bp: -order.totalBp, description: `Reversal of network commission for order ${orderId.slice(0, 8).toUpperCase()}` })
+        sponsorUserId = sponsor.sponsorUserId
+      }
     }
     await tx.update(mlmOrders).set({ status: 'Cancelled' }).where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId)))
   })
@@ -123,27 +137,43 @@ export async function createOrder(items: Array<{ id: string; name: string; price
       personalBp: mlmProfiles.personalBp,
       personalSp: mlmProfiles.personalSp,
       walletBalance: mlmProfiles.walletBalance,
+      sponsorUserId: mlmProfiles.sponsorUserId,
     })
       .from(mlmProfiles)
       .where(eq(mlmProfiles.userId, userId))
       .limit(1)
 
     if (profile) {
-      const commission = total * 0.1
+      const personalCommission = total * 0.1
       await tx.update(mlmProfiles)
         .set({
           personalBp: profile.personalBp + totalBp,
           personalSp: (Number(profile.personalSp) + total * 2).toFixed(2),
-          walletBalance: (Number(profile.walletBalance) + commission).toFixed(2),
+          walletBalance: (Number(profile.walletBalance) + personalCommission).toFixed(2),
         })
         .where(eq(mlmProfiles.userId, userId))
       await tx.insert(mlmRewards).values({
         userId,
         type: 'Personal commission',
-        amount: commission.toFixed(2),
+        amount: personalCommission.toFixed(2),
         bp: totalBp,
-        description: `10% commission from order ${createdOrder.id.slice(0, 8).toUpperCase()}`,
+        description: `10% personal commission from order ${createdOrder.id.slice(0, 8).toUpperCase()}`,
       })
+
+      const commissionRates = [0.1, 0.05, 0.02]
+      let sponsorUserId = profile.sponsorUserId
+      const paidSponsors = new Set<string>()
+      for (let level = 0; level < commissionRates.length && sponsorUserId; level += 1) {
+        if (paidSponsors.has(sponsorUserId)) break
+        paidSponsors.add(sponsorUserId)
+        const [sponsor] = await tx.select({ userId: mlmProfiles.userId, sponsorUserId: mlmProfiles.sponsorUserId, walletBalance: mlmProfiles.walletBalance })
+          .from(mlmProfiles).where(eq(mlmProfiles.userId, sponsorUserId)).limit(1)
+        if (!sponsor) break
+        const commission = total * commissionRates[level]
+        await tx.update(mlmProfiles).set({ walletBalance: (Number(sponsor.walletBalance) + commission).toFixed(2) }).where(eq(mlmProfiles.userId, sponsor.userId))
+        await tx.insert(mlmRewards).values({ userId: sponsor.userId, type: `Level ${level + 1} commission`, amount: commission.toFixed(2), bp: totalBp, description: `${commissionRates[level] * 100}% network commission from order ${createdOrder.id.slice(0, 8).toUpperCase()}` })
+        sponsorUserId = sponsor.sponsorUserId
+      }
     }
 
     return [createdOrder] as const
