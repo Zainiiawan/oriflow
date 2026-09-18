@@ -30,6 +30,14 @@ export const mlmAuditLogs = pgTable('mlm_audit_logs', {
   id: uuid('id').defaultRandom().primaryKey(), actorUserId: text('actor_user_id').notNull(), action: text('action').notNull(), entityType: text('entity_type').notNull(), entityId: text('entity_id').notNull(), details: jsonb('details').notNull().default({}), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const mlmWithdrawals = pgTable('mlm_withdrawals', {
+  id: uuid('id').defaultRandom().primaryKey(), userId: text('user_id').notNull(), amount: numeric('amount', { precision: 12, scale: 2 }).notNull(), status: text('status').notNull().default('pending'), payoutReference: text('payout_reference'), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const mlmFulfillmentEvents = pgTable('mlm_fulfillment_events', {
+  id: uuid('id').defaultRandom().primaryKey(), orderId: uuid('order_id').notNull(), actorUserId: text('actor_user_id').notNull(), status: text('status').notNull(), trackingReference: text('tracking_reference'), note: text('note'), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const mlmNotifications = pgTable('mlm_notifications', {
   id: uuid('id').defaultRandom().primaryKey(), userId: text('user_id').notNull(), type: text('type').notNull(), title: text('title').notNull(), message: text('message').notNull(), readAt: timestamp('read_at', { withTimezone: true }), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
