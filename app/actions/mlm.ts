@@ -43,7 +43,28 @@ export async function createOrder(items: Array<{ id: string; name: string; price
   })
   const total = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const totalBp = verifiedItems.reduce((sum, item) => sum + item.bp * item.quantity, 0)
-  const [order] = await db.insert(mlmOrders).values({ userId, status: 'Pending', total: total.toFixed(2), totalBp, items: verifiedItems }).returning()
+  const [order] = await db.transaction(async (tx) => {
+    const [createdOrder] = await tx.insert(mlmOrders).values({
+      userId,
+      status: 'Pending',
+      total: total.toFixed(2),
+      totalBp,
+      items: verifiedItems,
+    }).returning()
+
+    const [profile] = await tx.select({ personalBp: mlmProfiles.personalBp, personalSp: mlmProfiles.personalSp })
+      .from(mlmProfiles)
+      .where(eq(mlmProfiles.userId, userId))
+      .limit(1)
+
+    if (profile) {
+      await tx.update(mlmProfiles)
+        .set({ personalBp: profile.personalBp + totalBp, personalSp: (Number(profile.personalSp) + total * 2).toFixed(2) })
+        .where(eq(mlmProfiles.userId, userId))
+    }
+
+    return [createdOrder] as const
+  })
   revalidatePath('/')
   return order
 }
