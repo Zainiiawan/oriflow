@@ -75,11 +75,15 @@ export async function cancelOrder(orderId: string) {
   const userId = await getUserId()
   if (!orderId || orderId.length > 50) throw new Error('Invalid order')
   await db.transaction(async (tx) => {
-    const [order] = await tx.select({ total: mlmOrders.total, totalBp: mlmOrders.totalBp }).from(mlmOrders)
+    const [order] = await tx.select({ total: mlmOrders.total, totalBp: mlmOrders.totalBp, items: mlmOrders.items }).from(mlmOrders)
       .where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId), eq(mlmOrders.status, 'Pending'))).limit(1)
     if (!order) throw new Error('Order is no longer cancellable')
     const [profile] = await tx.select({ personalBp: mlmProfiles.personalBp, personalSp: mlmProfiles.personalSp, walletBalance: mlmProfiles.walletBalance, sponsorUserId: mlmProfiles.sponsorUserId })
       .from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
+    const cancelledItems = Array.isArray(order.items) ? order.items as Array<{ id: string; quantity: number }> : []
+    for (const item of cancelledItems) {
+      await tx.update(mlmProducts).set({ stockQuantity: sql`${mlmProducts.stockQuantity} + ${item.quantity}` }).where(eq(mlmProducts.id, item.id))
+    }
     if (profile) {
       const total = Number(order.total)
       await tx.update(mlmProfiles).set({
