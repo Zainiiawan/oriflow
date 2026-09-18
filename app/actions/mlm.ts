@@ -64,9 +64,21 @@ export async function createOrder(items: Array<{ id: string; name: string; price
       .limit(1)
 
     if (profile) {
+      const commission = total * 0.1
       await tx.update(mlmProfiles)
-        .set({ personalBp: profile.personalBp + totalBp, personalSp: (Number(profile.personalSp) + total * 2).toFixed(2) })
+        .set({
+          personalBp: profile.personalBp + totalBp,
+          personalSp: (Number(profile.personalSp) + total * 2).toFixed(2),
+          walletBalance: (Number((await tx.select({ walletBalance: mlmProfiles.walletBalance }).from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1))[0]?.walletBalance ?? 0) + commission).toFixed(2),
+        })
         .where(eq(mlmProfiles.userId, userId))
+      await tx.insert(mlmRewards).values({
+        userId,
+        type: 'Personal commission',
+        amount: commission.toFixed(2),
+        bp: totalBp,
+        description: `10% commission from order ${createdOrder.id.slice(0, 8).toUpperCase()}`,
+      })
     }
 
     return [createdOrder] as const
