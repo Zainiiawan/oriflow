@@ -32,9 +32,15 @@ export async function getDashboardData() {
 export async function createOrder(items: Array<{ id: string; name: string; price: number; bp: number; quantity: number }>) {
   const userId = await getUserId()
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
-  if (!items.length || totalQuantity > 99 || items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99)) throw new Error('Invalid order')
+  const hasDuplicateProducts = new Set(items.map((item) => item.id)).size !== items.length
+  if (
+    !items.length ||
+    hasDuplicateProducts ||
+    totalQuantity > 99 ||
+    items.some((item) => !item.id || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99)
+  ) throw new Error('Invalid order')
   const ids = items.map((item) => item.id)
-  const catalog = await db.select().from(mlmProducts).where(and(eq(mlmProducts.active, true)))
+  const catalog = await db.select().from(mlmProducts).where(eq(mlmProducts.active, true))
   const catalogMap = new Map(catalog.filter((item) => ids.includes(item.id)).map((item) => [item.id, item]))
   const verifiedItems = items.map((item) => {
     const product = catalogMap.get(item.id)
