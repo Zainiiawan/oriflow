@@ -53,6 +53,29 @@ export async function getDashboardData() {
   return { profile: profile ?? null, products, orders, rewards, network }
 }
 
+export async function cancelOrder(orderId: string) {
+  const userId = await getUserId()
+  if (!orderId || orderId.length > 50) throw new Error('Invalid order')
+  await db.transaction(async (tx) => {
+    const [order] = await tx.select({ total: mlmOrders.total, totalBp: mlmOrders.totalBp }).from(mlmOrders)
+      .where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId), eq(mlmOrders.status, 'Pending'))).limit(1)
+    if (!order) throw new Error('Order is no longer cancellable')
+    const [profile] = await tx.select({ personalBp: mlmProfiles.personalBp, personalSp: mlmProfiles.personalSp, walletBalance: mlmProfiles.walletBalance })
+      .from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
+    if (profile) {
+      const total = Number(order.total)
+      await tx.update(mlmProfiles).set({
+        personalBp: Math.max(0, profile.personalBp - order.totalBp),
+        personalSp: Math.max(0, Number(profile.personalSp) - total * 2).toFixed(2),
+        walletBalance: Math.max(0, Number(profile.walletBalance) - total * 0.1).toFixed(2),
+      }).where(eq(mlmProfiles.userId, userId))
+      await tx.insert(mlmRewards).values({ userId, type: 'Order reversal', amount: (-total * 0.1).toFixed(2), bp: -order.totalBp, description: `Reversal for cancelled order ${orderId.slice(0, 8).toUpperCase()}` })
+    }
+    await tx.update(mlmOrders).set({ status: 'Cancelled' }).where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId)))
+  })
+  revalidatePath('/')
+}
+
 export async function requestWithdrawal(amountInput: number) {
   const userId = await getUserId()
   const amount = Number(amountInput)
