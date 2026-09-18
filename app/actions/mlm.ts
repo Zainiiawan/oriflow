@@ -53,6 +53,15 @@ export async function getDashboardData() {
   return { profile: profile ?? null, products, orders, rewards, network }
 }
 
+export async function assignFulfillmentCity(orderId: string, cityInput: string) {
+  const userId = await getUserId()
+  const city = cityInput.trim()
+  const allowedCities = ['Multan', 'Lahore', 'Karachi', 'Islamabad']
+  if (!allowedCities.includes(city)) throw new Error('Unsupported fulfillment city')
+  await db.update(mlmOrders).set({ fulfillmentCity: city }).where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId), eq(mlmOrders.status, 'Pending')))
+  revalidatePath('/')
+}
+
 export async function cancelOrder(orderId: string) {
   const userId = await getUserId()
   if (!orderId || orderId.length > 50) throw new Error('Invalid order')
