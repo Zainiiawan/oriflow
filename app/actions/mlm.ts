@@ -26,7 +26,15 @@ export async function getDashboardData() {
   const products = await db.select().from(mlmProducts).where(eq(mlmProducts.active, true)).orderBy(desc(mlmProducts.createdAt))
   const orders = await db.select().from(mlmOrders).where(eq(mlmOrders.userId, userId)).orderBy(desc(mlmOrders.createdAt)).limit(20)
   const rewards = await db.select().from(mlmRewards).where(eq(mlmRewards.userId, userId)).orderBy(desc(mlmRewards.createdAt)).limit(20)
-  return { profile: profile ?? null, products, orders, rewards }
+  const network = await db.select({
+    id: mlmProfiles.id,
+    userId: mlmProfiles.userId,
+    rank: mlmProfiles.rank,
+    personalBp: mlmProfiles.personalBp,
+    personalSp: mlmProfiles.personalSp,
+    createdAt: mlmProfiles.createdAt,
+  }).from(mlmProfiles).where(eq(mlmProfiles.sponsorUserId, userId)).orderBy(desc(mlmProfiles.createdAt)).limit(100)
+  return { profile: profile ?? null, products, orders, rewards, network }
 }
 
 export async function createOrder(items: Array<{ id: string; name: string; price: number; bp: number; quantity: number }>) {
