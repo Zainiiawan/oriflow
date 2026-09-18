@@ -18,7 +18,7 @@ export const mlmProducts = pgTable('mlm_products', {
 })
 
 export const mlmOrders = pgTable('mlm_orders', {
-  id: uuid('id').defaultRandom().primaryKey(), userId: text('user_id').notNull(), status: text('status').notNull().default('Pending'), total: numeric('total', { precision: 12, scale: 2 }).notNull().default('0'), totalBp: integer('total_bp').notNull().default(0), items: jsonb('items').notNull().default([]), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  id: uuid('id').defaultRandom().primaryKey(), userId: text('user_id').notNull(), status: text('status').notNull().default('Pending'), paymentStatus: text('payment_status').notNull().default('Awaiting bank transfer'), total: numeric('total', { precision: 12, scale: 2 }).notNull().default('0'), totalBp: integer('total_bp').notNull().default(0), items: jsonb('items').notNull().default([]), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export const mlmRewards = pgTable('mlm_rewards', {
