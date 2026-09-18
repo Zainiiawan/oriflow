@@ -61,6 +61,16 @@ export async function createProduct(input: { name: string; category: string; pri
   return product
 }
 
+export async function updateProduct(productId: string, input: { name: string; category: string; price: number; bp: number }) {
+  const actorUserId = await requireAdmin()
+  const name = input.name.trim().slice(0, 120)
+  const category = input.category.trim().slice(0, 80)
+  if (!productId || !name || !category || !Number.isFinite(input.price) || input.price <= 0 || !Number.isInteger(input.bp) || input.bp < 0) throw new Error('Invalid product')
+  await db.update(mlmProducts).set({ name, category, price: input.price.toFixed(2), bp: input.bp }).where(eq(mlmProducts.id, productId))
+  await db.insert(mlmAuditLogs).values({ actorUserId, action: 'product_updated', entityType: 'product', entityId: productId, details: { name, category } })
+  revalidatePath('/')
+}
+
 export async function updateProductStock(productId: string, quantityInput: number) {
   const actorUserId = await requireAdmin()
   const quantity = Math.floor(Number(quantityInput))
@@ -127,6 +137,32 @@ export async function getDashboardData() {
     createdAt: mlmProfiles.createdAt,
   }).from(mlmProfiles).where(eq(mlmProfiles.sponsorUserId, userId)).orderBy(desc(mlmProfiles.createdAt)).limit(100)
   return { profile: profile ?? null, products, orders, rewards, network }
+}
+
+export async function requestReturn(orderId: string, reasonInput: string) {
+  const userId = await getUserId()
+  const reason = reasonInput.trim().slice(0, 500)
+  if (!orderId || !reason) throw new Error('Order and return reason are required')
+  const [order] = await db.select({ id: mlmOrders.id }).from(mlmOrders).where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId))).limit(1)
+  if (!order) throw new Error('Order not found')
+  await db.update(mlmOrders).set({ refundStatus: 'requested' }).where(eq(mlmOrders.id, orderId))
+  await db.insert(mlmNotifications).values({ userId, type: 'return', title: 'Return request received', message: 'Your return request is awaiting review.' })
+  revalidatePath('/')
+}
+
+export async function reviewWithdrawal(withdrawalId: string, decisionInput: string, payoutReferenceInput = '') {
+  const actorUserId = await requireAdmin()
+  const status = decisionInput === 'approve' ? 'approved' : decisionInput === 'reject' ? 'rejected' : ''
+  if (!status) throw new Error('Invalid withdrawal decision')
+  const [withdrawal] = await db.select({ userId: mlmWithdrawals.userId, amount: mlmWithdrawals.amount }).from(mlmWithdrawals).where(eq(mlmWithdrawals.id, withdrawalId)).limit(1)
+  if (!withdrawal) throw new Error('Withdrawal not found')
+  await db.transaction(async (tx) => {
+    await tx.update(mlmWithdrawals).set({ status, payoutReference: payoutReferenceInput.trim().slice(0, 120) || null }).where(eq(mlmWithdrawals.id, withdrawalId))
+    if (status === 'rejected') await tx.update(mlmProfiles).set({ walletBalance: sql`${mlmProfiles.walletBalance} + ${withdrawal.amount}` }).where(eq(mlmProfiles.userId, withdrawal.userId))
+    await tx.insert(mlmAuditLogs).values({ actorUserId, action: `withdrawal_${status}`, entityType: 'withdrawal', entityId: withdrawalId, details: { payoutReference: payoutReferenceInput } })
+    await tx.insert(mlmNotifications).values({ userId: withdrawal.userId, type: 'withdrawal', title: `Withdrawal ${status}`, message: status === 'approved' ? 'Your withdrawal was approved.' : 'Your balance was restored because the withdrawal was rejected.' })
+  })
+  revalidatePath('/')
 }
 
 export async function createSupportTicket(subjectInput: string, messageInput: string) {
