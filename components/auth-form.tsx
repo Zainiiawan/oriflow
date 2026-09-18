@@ -22,7 +22,10 @@ export default function AuthForm({ mode, referralCode, redirectTo = '/' }: { mod
       : await signIn.email({ email, password })
     setPending(false)
     if (result.error) {
-      setError('Unable to continue. Check your details and try again.')
+      const message = typeof result.error.message === 'string' ? result.error.message.toLowerCase() : ''
+      setError(mode === 'sign-in' && (message.includes('invalid') || message.includes('credential') || message.includes('not found'))
+        ? 'This account does not exist yet, or the password is incorrect. Create the admin account first, then sign in.'
+        : 'Unable to continue. Check your details and try again.')
       return
     }
     if (mode === 'sign-up' && referralCode) {
