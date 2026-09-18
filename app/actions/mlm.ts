@@ -53,6 +53,15 @@ export async function getDashboardData() {
   return { profile: profile ?? null, products, orders, rewards, network }
 }
 
+export async function submitPaymentReference(orderId: string, referenceInput: string) {
+  const userId = await getUserId()
+  const reference = referenceInput.trim().slice(0, 120)
+  if (!reference) throw new Error('Payment reference is required')
+  await db.update(mlmOrders).set({ paymentReference: reference, paymentStatus: 'Proof submitted' })
+    .where(and(eq(mlmOrders.id, orderId), eq(mlmOrders.userId, userId), eq(mlmOrders.status, 'Pending')))
+  revalidatePath('/')
+}
+
 export async function assignFulfillmentCity(orderId: string, cityInput: string) {
   const userId = await getUserId()
   const city = cityInput.trim()
