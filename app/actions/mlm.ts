@@ -1,6 +1,6 @@
 'use server'
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
@@ -129,6 +129,7 @@ export async function createOrder(items: Array<{ id: string; name: string; price
   const verifiedItems = items.map((item) => {
     const product = catalogMap.get(item.id)
     if (!product) throw new Error('Product unavailable')
+    if (product.stockQuantity > 0 && product.stockQuantity < item.quantity) throw new Error(`Insufficient stock for ${product.name}`)
     return { id: product.id, name: product.name, price: Number(product.price), bp: product.bp, quantity: item.quantity }
   })
   const total = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -141,6 +142,12 @@ export async function createOrder(items: Array<{ id: string; name: string; price
       totalBp,
       items: verifiedItems,
     }).returning()
+
+    for (const item of verifiedItems) {
+      await tx.update(mlmProducts)
+        .set({ stockQuantity: sql`CASE WHEN ${mlmProducts.stockQuantity} > 0 THEN GREATEST(0, ${mlmProducts.stockQuantity} - ${item.quantity}) ELSE ${mlmProducts.stockQuantity} END` })
+        .where(eq(mlmProducts.id, item.id))
+    }
 
     const [profile] = await tx.select({
       personalBp: mlmProfiles.personalBp,

@@ -14,7 +14,7 @@ export const mlmProfiles = pgTable('mlm_profiles', {
 })
 
 export const mlmProducts = pgTable('mlm_products', {
-  id: uuid('id').defaultRandom().primaryKey(), name: text('name').notNull(), category: text('category').notNull(), price: numeric('price', { precision: 12, scale: 2 }).notNull(), bp: integer('bp').notNull().default(0), imageTone: text('image_tone').notNull(), active: boolean('active').notNull().default(true), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  id: uuid('id').defaultRandom().primaryKey(), name: text('name').notNull(), category: text('category').notNull(), price: numeric('price', { precision: 12, scale: 2 }).notNull(), bp: integer('bp').notNull().default(0), stockQuantity: integer('stock_quantity').notNull().default(0), imageTone: text('image_tone').notNull(), active: boolean('active').notNull().default(true), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export const mlmOrders = pgTable('mlm_orders', {
