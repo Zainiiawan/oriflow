@@ -13,6 +13,22 @@ async function getUserId() {
   return session.user.id
 }
 
+export async function claimReferral(referralCodeInput: string) {
+  const userId = await getUserId()
+  const referralCode = referralCodeInput.trim().toUpperCase()
+  if (!referralCode || referralCode.length > 40) throw new Error('Invalid referral code')
+  const [sponsor] = await db.select({ userId: mlmProfiles.userId }).from(mlmProfiles).where(eq(mlmProfiles.referralCode, referralCode)).limit(1)
+  if (!sponsor || sponsor.userId === userId) throw new Error('Referral code unavailable')
+  const existing = await db.select({ id: mlmProfiles.id, sponsorUserId: mlmProfiles.sponsorUserId }).from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
+  if (existing[0]?.sponsorUserId) return
+  if (existing[0]) {
+    await db.update(mlmProfiles).set({ sponsorUserId: sponsor.userId }).where(eq(mlmProfiles.userId, userId))
+  } else {
+    await db.insert(mlmProfiles).values({ userId, referralCode: `OF-${userId.slice(0, 8).toUpperCase()}`, sponsorUserId: sponsor.userId })
+  }
+  revalidatePath('/')
+}
+
 export async function getDashboardData() {
   const userId = await getUserId()
   let [profile] = await db.select().from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
