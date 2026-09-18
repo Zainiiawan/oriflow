@@ -6,7 +6,7 @@ import { getDashboardData } from '@/app/actions/mlm'
 
 export default async function AdminPage() {
   const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect('/sign-in')
+  if (!session?.user) redirect('/admin/login')
 
   const data = await getDashboardData()
   if (!data.profile || !['admin', 'manager'].includes(data.profile.role)) redirect('/')

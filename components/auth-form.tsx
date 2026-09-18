@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { signIn, signUp } from '@/lib/auth-client'
 import { claimReferral } from '@/app/actions/mlm'
 
-export default function AuthForm({ mode, referralCode }: { mode: 'sign-in' | 'sign-up'; referralCode?: string }) {
+export default function AuthForm({ mode, referralCode, redirectTo = '/' }: { mode: 'sign-in' | 'sign-up'; referralCode?: string; redirectTo?: string }) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -32,7 +32,7 @@ export default function AuthForm({ mode, referralCode }: { mode: 'sign-in' | 'si
         // Account creation should still succeed when a referral code has expired.
       }
     }
-    router.push('/')
+    router.push(redirectTo)
     router.refresh()
   }
 
