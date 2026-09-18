@@ -37,6 +37,20 @@ export async function getDashboardData() {
   return { profile: profile ?? null, products, orders, rewards, network }
 }
 
+export async function requestWithdrawal(amountInput: number) {
+  const userId = await getUserId()
+  const amount = Number(amountInput)
+  if (!Number.isFinite(amount) || amount < 500 || amount > 500000) throw new Error('Invalid withdrawal amount')
+  await db.transaction(async (tx) => {
+    const [profile] = await tx.select({ walletBalance: mlmProfiles.walletBalance }).from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
+    const balance = Number(profile?.walletBalance ?? 0)
+    if (amount > balance) throw new Error('Insufficient wallet balance')
+    await tx.update(mlmProfiles).set({ walletBalance: (balance - amount).toFixed(2) }).where(eq(mlmProfiles.userId, userId))
+    await tx.insert(mlmRewards).values({ userId, type: 'Withdrawal request', amount: (-amount).toFixed(2), bp: 0, description: 'Pending admin approval' })
+  })
+  revalidatePath('/')
+}
+
 export async function createOrder(items: Array<{ id: string; name: string; price: number; bp: number; quantity: number }>) {
   const userId = await getUserId()
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
