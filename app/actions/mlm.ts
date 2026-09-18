@@ -5,7 +5,7 @@ import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { mlmOrders, mlmProducts, mlmProfiles, mlmRewards } from '@/lib/db/schema'
+import { mlmAuditLogs, mlmNotifications, mlmOrders, mlmProducts, mlmProfiles, mlmRewards, mlmSupportTickets } from '@/lib/db/schema'
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -51,6 +51,16 @@ export async function getDashboardData() {
     createdAt: mlmProfiles.createdAt,
   }).from(mlmProfiles).where(eq(mlmProfiles.sponsorUserId, userId)).orderBy(desc(mlmProfiles.createdAt)).limit(100)
   return { profile: profile ?? null, products, orders, rewards, network }
+}
+
+export async function createSupportTicket(subjectInput: string, messageInput: string) {
+  const userId = await getUserId()
+  const subject = subjectInput.trim().slice(0, 120)
+  const message = messageInput.trim().slice(0, 2000)
+  if (!subject || !message) throw new Error('Subject and message are required')
+  await db.insert(mlmSupportTickets).values({ userId, subject, message })
+  await db.insert(mlmNotifications).values({ userId, type: 'support', title: 'Support ticket created', message: 'Your request has been received and is awaiting review.' })
+  revalidatePath('/')
 }
 
 export async function submitPaymentReference(orderId: string, referenceInput: string) {
@@ -155,6 +165,9 @@ export async function createOrder(items: Array<{ id: string; name: string; price
       totalBp,
       items: verifiedItems,
     }).returning()
+
+    await tx.insert(mlmAuditLogs).values({ actorUserId: userId, action: 'order_created', entityType: 'order', entityId: createdOrder.id, details: { total, totalBp } })
+    await tx.insert(mlmNotifications).values({ userId, type: 'order', title: 'Order submitted', message: `Order ${createdOrder.id.slice(0, 8).toUpperCase()} is awaiting payment verification.` })
 
     for (const item of verifiedItems) {
       await tx.update(mlmProducts)
