@@ -13,6 +13,27 @@ async function getUserId() {
   return session.user.id
 }
 
+async function requireAdmin() {
+  const userId = await getUserId()
+  const [profile] = await db.select({ role: mlmProfiles.role }).from(mlmProfiles).where(eq(mlmProfiles.userId, userId)).limit(1)
+  if (!profile || !['admin', 'manager'].includes(profile.role)) throw new Error('Admin access required')
+  return userId
+}
+
+export async function reviewOrder(orderId: string, decisionInput: string) {
+  const actorUserId = await requireAdmin()
+  const decision = decisionInput === 'approve' ? 'Approved' : decisionInput === 'reject' ? 'Rejected' : ''
+  if (!decision || !orderId) throw new Error('Invalid review')
+  const [order] = await db.select({ userId: mlmOrders.userId }).from(mlmOrders).where(eq(mlmOrders.id, orderId)).limit(1)
+  if (!order) throw new Error('Order not found')
+  await db.transaction(async (tx) => {
+    await tx.update(mlmOrders).set({ status: decision, paymentStatus: decision === 'Approved' ? 'Verified' : 'Rejected' }).where(eq(mlmOrders.id, orderId))
+    await tx.insert(mlmAuditLogs).values({ actorUserId, action: `order_${decision.toLowerCase()}`, entityType: 'order', entityId: orderId, details: {} })
+    await tx.insert(mlmNotifications).values({ userId: order.userId, type: 'order', title: `Order ${decision.toLowerCase()}`, message: `Your order ${orderId.slice(0, 8).toUpperCase()} was ${decision.toLowerCase()}.` })
+  })
+  revalidatePath('/')
+}
+
 export async function claimReferral(referralCodeInput: string) {
   const userId = await getUserId()
   const referralCode = referralCodeInput.trim().toUpperCase()
